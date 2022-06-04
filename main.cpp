@@ -44,7 +44,7 @@ int container(void* arg) {
 	//  run the terminal/new program
 	int ret = execvp(path_to_program_to_run_within_container, args_for_program);
 
-	return 0;
+	return ret;
 }
 
 
