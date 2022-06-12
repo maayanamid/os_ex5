@@ -51,8 +51,7 @@ int read_data(int s, char *buf, int n) {
             buf += br;
         }
         if (br < 1) {
-            std::cerr << SYS_ERROR << READ_ERROR << std::endl;
-            exit(EXIT_FAIL);
+            return(br);
         }
     }
     return(bcount);
@@ -133,8 +132,9 @@ int call_socket(char *hostname, int portnum) {
         std::cerr << SYS_ERROR << SOCKET_ERROR << std::endl;
         exit(EXIT_FAIL);
     }
-    if (connect(s, (struct sockaddr *) (&sa), sizeof sa) < SUCCESS) {                  /* connect */
+    if (connect(s, (struct sockaddr *) (&sa), sizeof(sa)) < SUCCESS) {                  /* connect */
         std::cerr << SYS_ERROR << CONNECT_ERROR << std::endl;
+        //std::cerr << errno << std::endl;
         exit(EXIT_FAIL);
     }
     return(s);
@@ -142,13 +142,18 @@ int call_socket(char *hostname, int portnum) {
 
 
 int run_server(int port) {
-    char buf[BUFFLEN];
+    char buf[BUFFLEN] = {'\0'};
 
     // establish a socket
     int s = establish(port);
     //listen and accept connection
+    struct sockaddr_in isa; /* address of socket */
+    int i,c;                  /* size of address */
 
-    int c = accept(s, nullptr, nullptr);
+    i = sizeof(isa);                   /* find socket's address */
+    getsockname(s, (struct sockaddr *) &isa, (socklen_t *) &i);            /* for accept() */
+
+    c = accept(s,  (struct sockaddr *) (&isa), (socklen_t *) (&i));  /* accept connection if there is one */
     if (c < SUCCESS) {
         std::cerr << SYS_ERROR << ACCEPT_ERROR << std::endl;
         exit(EXIT_FAIL);
@@ -169,10 +174,12 @@ int run_server(int port) {
 
 int run_client(int port, char* terminal_command_to_run) {
     char buf[BUFFLEN];
+    char myname[MAXHOSTNAME+1];
 
-    // connect to socket
-    // TODO make sure 127.0.0.1
-    int s = call_socket("127.0.0.1", port);
+    // connect to socket on self
+    // TODO make sure not given
+    gethostname(myname, MAXHOSTNAME);
+    int s = call_socket(myname, port);
 
     // write terminal command into socket
     write_data(s, terminal_command_to_run, strlen(terminal_command_to_run));
