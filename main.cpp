@@ -4,55 +4,165 @@
 #include<unistd.h>
 #include <cstring>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include<sys/mount.h>
 #include <fstream>
+#include <signal.h>
+#include <experimental/filesystem>
+
 
 #define STACK 8192
+#define SYS_ERROR "system error: "
+#define MEM_ERROR "memory allocation failed"
+#define CLONE_ERROR "clone failure"
+#define UMOUNT_ERROR "umount failure"
+#define REMOVE_ERROR "remove failure"
+#define WAIT_ERROR "wait failure"
+#define HOST_ERROR "hostname failure"
+#define CHROOT_ERROR "chroot failure"
+#define MKDIR_ERROR "mkdir failure"
+#define CHDIR_ERROR "chdir failure"
+#define MOUNT_ERROR "mount failure"
+#define EXECVP_ERROR "execvp failure"
+#define FILE_ERROR "file failure"
+#define ARG_NUM_ERROR "not enough arguments given"
+#define SUCCESS 0
+#define EXIT_FAIL 1
+#define FAILURE_CODE -1
 
 int container(void* arg) {
 	char** argv = (char **)arg;
-	char* new_hostname = argv[0];
-	char* new_filesystem_dir = argv[1];
-	char* num_processes = argv[2];
-	char* path_to_program_to_run_within_container = argv[3];
-	char** args_for_program = argv + 4;
+	char* new_hostname = argv[1];
+	char* new_filesystem_dir = argv[2];
+	char* num_processes = argv[3];
+	char* path_to_program_to_run_within_container = argv[4];
+	char** args_for_program = argv + 5;
 
-	// mount filesystem
+	// change hostname
+	if (sethostname(new_hostname, strlen(new_hostname)) == FAILURE_CODE) {
+	    std::cerr << SYS_ERROR << HOST_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
 
 	// change root
-	chroot(new_filesystem_dir);
-	mount("proc", "/proc", "proc", 0, 0);
-	mkdir("/sys/fs/cgroup/pids");
+	if (chroot(new_filesystem_dir) == FAILURE_CODE) {
+	    std::cerr << SYS_ERROR << CHROOT_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+
+	//change working directory
+	if (chdir("/") == FAILURE_CODE) {
+	    std::cerr << SYS_ERROR << CHDIR_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+	//TODO ERASE - Only for debugging
+	//std::cerr << new_filesystem_dir << std::endl;
+	//	char tmp[256];
+	// 	getcwd(tmp, 256);
+	// 	std::cerr << "Current working directory: " << tmp << std::endl;
+
+	std::string dirs[] = {"sys", "fs", "cgroups", "pids"};
+    for (std::string s : dirs) {
+        if (mkdir(s.c_str(), 0755) == FAILURE_CODE) {
+            std::cerr << SYS_ERROR << MKDIR_ERROR << std::endl;
+            exit(EXIT_FAIL);
+        }
+        if (chdir(s.c_str()) == FAILURE_CODE) {
+            std::cerr << SYS_ERROR << CHDIR_ERROR << std::endl;
+            exit(EXIT_FAIL);
+        }
+    }
 
 	// To attach the container process into this new cgroup, you need to write the process’s pid into the file “cgroup.procs” under the new directory we created
-	ofstream cgroupProcs("/sys/fs/cgroup/pids/cgroup.procs");
+	std::ofstream cgroupProcs("cgroup.procs");
+	if (cgroupProcs.bad()) {
+	    std::cerr << SYS_ERROR << FILE_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
 	cgroupProcs << "1";
 	cgroupProcs.close();
 
 	// Next, we need to write into the file “pids.max” the number of processes which is allowed
-	ofstream pidsMax("/sys/fs/cgroup/pids/pids.max");
+	std::ofstream pidsMax("pids.max");
+	if (pidsMax.bad()) {
+	    std::cerr << SYS_ERROR << FILE_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
 	pidsMax << num_processes;
 	pidsMax.close();
 
-	// Finally, to release the resources when the container is finished, we will write into the file “notify_on_release” the value 1
-	ofstream pidsMax("/sys/fs/cgroup/pids/notify_on_release");
-	pidsMax << "1";
-	pidsMax.close();
 
-	// change hostname
-	sethostname(new_hostname, strlen(new_hostname));
-	
+	// Finally, to release the resources when the container is finished, we will write into the file “notify_on_release” the value 1
+	std::ofstream notifyOnRelease("notify_on_release");
+	if (notifyOnRelease.bad()) {
+	    std::cerr << SYS_ERROR << FILE_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+	notifyOnRelease << "1";
+	notifyOnRelease.close();
+
+	if (chdir("/") == FAILURE_CODE) {
+	    std::cerr << SYS_ERROR << CHDIR_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+
+
+	//Mount
+	if (mount("proc", "/proc", "proc", 0, 0) != SUCCESS) {
+	    std::cerr << SYS_ERROR << MOUNT_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+
 	//  run the terminal/new program
 	int ret = execvp(path_to_program_to_run_within_container, args_for_program);
-
-	return ret;
+    if (ret == FAILURE_CODE) {
+        std::cerr << SYS_ERROR << EXECVP_ERROR << std::endl;
+        exit(EXIT_FAIL);
+    }
+	return 0;
 }
 
 
 int main(int argc, char* argv[]) {
-	void* stack = malloc(STACK);
+    if (argc < 4) {
+        std::cerr << SYS_ERROR << ARG_NUM_ERROR << std::endl;
+        exit(EXIT_FAIL);
+    }
+	char* stack = (char*) malloc(STACK);
+	if (stack == nullptr) {
+	    std::cerr << SYS_ERROR << MEM_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+	char* new_filesystem_dir = argv[2];
 	int container_pid = clone(container, stack + STACK, CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD, argv);
-	wait(NULL);
-	umount(); // TODO see if require arguments
+	if (container_pid == FAILURE_CODE) {
+	    std::cerr << SYS_ERROR << CLONE_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+	if (wait(nullptr) == FAILURE_CODE) {
+	    std::cerr << SYS_ERROR << WAIT_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+	if (umount(strcat(new_filesystem_dir, "/proc")) == FAILURE_CODE) {
+	    std::cerr << SYS_ERROR << UMOUNT_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+	if (remove(strcat(new_filesystem_dir, "/sys/fs/cgroup/pids/cgroup.procs")) != SUCCESS) {
+	    std::cerr << SYS_ERROR << REMOVE_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+	if (remove(strcat(new_filesystem_dir, "/sys/fs/cgroup/pids/pids.max")) != SUCCESS) {
+	    std::cerr << SYS_ERROR << REMOVE_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+	if (remove(strcat(new_filesystem_dir, "/sys/fs/cgroup/pids/notify_on_release")) != SUCCESS) {
+	    std::cerr << SYS_ERROR << REMOVE_ERROR << std::endl;
+	    exit(EXIT_FAIL);
+	}
+	if (rmdir("sys") != FAILURE_CODE){
+	    std::cerr << SYS_ERROR << std::endl; //TODO
+	    exit(EXIT_FAIL);
+	}
 	free(stack);
 }
 
