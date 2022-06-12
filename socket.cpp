@@ -27,7 +27,6 @@
 #define ACCEPT_ERROR "accept connection failed"
 #define CONNECT_ERROR "creating connection failed"
 #define WRITE_ERROR "problem writing"
-#define READ_ERROR "problem reading"
 #define INVALID_COMMAND "problem executing system command"
 
 
@@ -35,16 +34,14 @@
 #define MAX_CLIENTS 5
 #define SUCCESS 0
 #define EXIT_FAIL 1
-#define FAILURE_CODE -1
 #define MAXHOSTNAME 40
 
 
 int read_data(int s, char *buf, int n) {
-    int bcount;       /* counts bytes read */
-    int br;               /* bytes read this pass */
-    bcount= 0; br= 0;
+    int bcount = 0;
+    int br = 0;
 
-    while (bcount < n) { /* loop until full buffer */
+    while (bcount < n) {
         br = read(s, buf, n-bcount);
         if (br > 0)  {
             bcount += br;
@@ -59,20 +56,19 @@ int read_data(int s, char *buf, int n) {
 
 int write_data(int s, char* buf, int n)
 {
-    int bcount;          /* counts bytes read */
-    int br;              /* bytes read this pass */
+    int bcount = 0;
+    int br = 0;
 
-    bcount= 0;
-    br= 0;
-    while (bcount < n) {             /* loop until full buffer */
-      if ((br= write(s,buf,n-bcount)) > 0) {
-          bcount += br;                /* increment byte counter */
-          buf += br;                   /* move buffer ptr for next read */
-      }
-      if (br < 0) {
+    while (bcount < n) {
+        br = write(s,buf,n-bcount);
+        if (br > 0) {
+          bcount += br;
+          buf += br;
+        }
+        if (br < 0) {
           std::cerr << SYS_ERROR << WRITE_ERROR << std::endl;
           exit(EXIT_FAIL);
-      }
+        }
     }
     return(bcount);
 }
@@ -82,21 +78,22 @@ int establish(int port) {
     char myname[MAXHOSTNAME+1];
     struct sockaddr_in sa;
     struct hostent *hp;
+
     //hostnet initialization
     gethostname(myname, MAXHOSTNAME);
     hp = gethostbyname(myname);
-    if (hp == NULL) {
+    if (hp == nullptr) {
         std::cerr << SYS_ERROR << HOSTNAME_ERROR << std::endl;
         exit(EXIT_FAIL);
     }
     //sockaddrr_in initlization
     memset(&sa, 0, sizeof(struct sockaddr_in));
     sa.sin_family = hp->h_addrtype;
-    /* this is our host address */
+    // host address
     memcpy(&sa.sin_addr, hp->h_addr, hp->h_length);
-    /* this is our port number */
+    // port number
     sa.sin_port= htons(port);
-    /* create socket */
+    // create socket
     int s = socket(AF_INET, SOCK_STREAM, 0);
     if (s < SUCCESS) {
         std::cerr << SYS_ERROR << SOCKET_ERROR << std::endl;
@@ -117,24 +114,25 @@ int call_socket(char *hostname, int portnum) {
     struct hostent *hp;
 
     hp = gethostbyname(hostname);
-    if (hp == NULL) { /* do we know the host's address? */
+    if (hp == nullptr) {
         std::cerr << SYS_ERROR << HOSTNAME_ERROR << std::endl;
         exit(EXIT_FAIL);
     }
 
     bzero(&sa,sizeof(sa));
-    bcopy(hp->h_addr,(char *)&sa.sin_addr,hp->h_length); /* set address */
+    // set address
+    bcopy(hp->h_addr,(char *)&sa.sin_addr,hp->h_length);
     sa.sin_family = hp->h_addrtype;
     sa.sin_port = htons((u_short)portnum);
-    /* get socket */
+    // get socket
     int s = socket(hp->h_addrtype,SOCK_STREAM,0);
     if (s < SUCCESS) {
         std::cerr << SYS_ERROR << SOCKET_ERROR << std::endl;
         exit(EXIT_FAIL);
     }
-    if (connect(s, (struct sockaddr *) (&sa), sizeof(sa)) < SUCCESS) {                  /* connect */
+    // connect to socket
+    if (connect(s, (struct sockaddr *) (&sa), sizeof(sa)) < SUCCESS) {
         std::cerr << SYS_ERROR << CONNECT_ERROR << std::endl;
-        //std::cerr << errno << std::endl;
         exit(EXIT_FAIL);
     }
     return(s);
@@ -144,16 +142,17 @@ int call_socket(char *hostname, int portnum) {
 int run_server(int port) {
     char buf[BUFFLEN] = {'\0'};
 
-    // establish a socket
+    // establish a socket and listen
     int s = establish(port);
-    //listen and accept connection
-    struct sockaddr_in isa; /* address of socket */
-    int i,c;                  /* size of address */
 
-    i = sizeof(isa);                   /* find socket's address */
-    getsockname(s, (struct sockaddr *) &isa, (socklen_t *) &i);            /* for accept() */
+    // accept connection
 
-    c = accept(s,  (struct sockaddr *) (&isa), (socklen_t *) (&i));  /* accept connection if there is one */
+    struct sockaddr_in isa;
+    int i = sizeof(isa);
+    // find socket's address
+    getsockname(s, (struct sockaddr *) &isa, (socklen_t *) &i);
+    // accept connection if there is one */
+    int c = accept(s,  (struct sockaddr *) (&isa), (socklen_t *) (&i));
     if (c < SUCCESS) {
         std::cerr << SYS_ERROR << ACCEPT_ERROR << std::endl;
         exit(EXIT_FAIL);
@@ -161,6 +160,7 @@ int run_server(int port) {
 
     //read terminal command from connection
     read_data(c, buf, BUFFLEN - 1);
+
     // execute terminal command
     if (system(buf) != 0) {
         std::cerr << SYS_ERROR << INVALID_COMMAND << std::endl;
@@ -173,7 +173,6 @@ int run_server(int port) {
 }
 
 int run_client(int port, char* terminal_command_to_run) {
-    char buf[BUFFLEN];
     char myname[MAXHOSTNAME+1];
 
     // connect to socket on self
