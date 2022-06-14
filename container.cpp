@@ -10,32 +10,33 @@
 #include <signal.h>
 
 #define STACK 8192
+#define MAX_ARG_NUM 10 //TODO what is the right value?
 #define SYS_ERROR "system error: "
-#define MEM_ERROR "memory allocation failed"
-#define CLONE_ERROR "clone failure"
-#define UMOUNT_ERROR "umount failure"
-#define REMOVE_ERROR "remove failure"
-#define WAIT_ERROR "wait failure"
-#define HOST_ERROR "hostname failure"
-#define CHROOT_ERROR "chroot failure"
-#define MKDIR_ERROR "mkdir failure"
+#define MEM_ERROR "memory allocation failed "
+#define CLONE_ERROR "clone failure "
+#define UMOUNT_ERROR "umount failure "
+#define REMOVE_ERROR "remove failure "
+#define WAIT_ERROR "wait failure "
+#define HOST_ERROR "hostname failure "
+#define CHROOT_ERROR "chroot failure "
+#define MKDIR_ERROR "mkdir failure "
 #define CHDIR_ERROR "chdir failure "
-#define MOUNT_ERROR "mount failure"
-#define EXECVP_ERROR "execvp failure"
-#define FILE_ERROR "file failure"
+#define MOUNT_ERROR "mount failure "
+#define EXECVP_ERROR "execvp failure "
+#define FILE_ERROR "file failure "
 #define ARG_NUM_ERROR "not enough arguments given"
-#define RMDIR_ERROR "rmdir failed"
+#define RMDIR_ERROR "rmdir failed "
 #define SUCCESS 0
 #define EXIT_FAIL 1
 #define FAILURE_CODE -1
 
 int container(void* arg) {
 	char** argv = (char **)arg;
-	char* new_hostname = argv[1];
-	char* new_filesystem_dir = argv[2];
-	char* num_processes = argv[3];
-	char* path_to_program_to_run_within_container = argv[4];
-	char** args_for_program = argv + 5; //TODO fix argument passing
+	char* new_hostname = argv[2];
+	char* new_filesystem_dir = argv[3];
+	char* num_processes = argv[4];
+	char* path_to_program_to_run_within_container = argv[5];
+	char** args_for_program = argv + 5; //TODO this seems to work, but why?
 
 	// change hostname
 	if (sethostname(new_hostname, strlen(new_hostname)) == FAILURE_CODE) {
@@ -98,13 +99,16 @@ int container(void* arg) {
 	    exit(EXIT_FAIL);
 	}
 
-	//find args TODO
-//	for (int i = 5; i < argc; i++){
-//	    std::cerr << arg[i] << std::endl;
-//	}
+    //find args // TODO seems to work without this part
+//    int n_args_for_program = atoi(argv[0]);
+//    for (int i = 6; i <= n_args_for_program; i++){ //6 is where program args begin
+//        //std::cerr << argv[i] << std::endl;
+//    }
+
 	//  run the terminal/new program
 	int ret = execvp(path_to_program_to_run_within_container, args_for_program);
     if (ret == FAILURE_CODE) {
+        std::cerr << *args_for_program << std::endl;
         std::cerr << SYS_ERROR << EXECVP_ERROR << strerror(errno) << std::endl;
         exit(EXIT_FAIL);
     }
@@ -122,8 +126,14 @@ int main(int argc, char* argv[]) {
 	    std::cerr << SYS_ERROR << MEM_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
-	std::string new_filesystem_dir = argv[2];
-	int container_pid = clone(container, stack + STACK, CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD, argv);
+	//prep args
+	char* new_args[MAX_ARG_NUM];
+	new_args[0] = (char*) std::to_string(argc).c_str();
+	for (int i = 0; i < argc; i++) {
+	    new_args[i + 1] = argv[i];
+	}
+
+	int container_pid = clone(container, stack + STACK, CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD, new_args);
 	if (container_pid == FAILURE_CODE) {
 	    std::cerr << SYS_ERROR << CLONE_ERROR << std::endl;
 	    exit(EXIT_FAIL);
@@ -132,6 +142,8 @@ int main(int argc, char* argv[]) {
 	    std::cerr << SYS_ERROR << WAIT_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
+
+	std::string new_filesystem_dir = argv[2];
 	if (umount((new_filesystem_dir + "/proc").c_str()) == FAILURE_CODE) {
 	    std::cerr << SYS_ERROR << UMOUNT_ERROR << std::endl;
 	    exit(EXIT_FAIL);
