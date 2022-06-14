@@ -35,7 +35,7 @@ int container(void* arg) {
 	char* new_filesystem_dir = argv[2];
 	char* num_processes = argv[3];
 	char* path_to_program_to_run_within_container = argv[4];
-	char** args_for_program = argv + 5;
+	char** args_for_program = argv + 5; //TODO fix argument passing
 
 	// change hostname
 	if (sethostname(new_hostname, strlen(new_hostname)) == FAILURE_CODE) {
@@ -98,6 +98,10 @@ int container(void* arg) {
 	    exit(EXIT_FAIL);
 	}
 
+	//find args TODO
+//	for (int i = 5; i < argc; i++){
+//	    std::cerr << arg[i] << std::endl;
+//	}
 	//  run the terminal/new program
 	int ret = execvp(path_to_program_to_run_within_container, args_for_program);
     if (ret == FAILURE_CODE) {
