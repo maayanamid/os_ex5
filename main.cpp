@@ -8,7 +8,9 @@
 #include<sys/mount.h>
 #include <fstream>
 #include <signal.h>
-#include <experimental/filesystem>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sstream>
 
 
 #define STACK 8192
@@ -26,6 +28,7 @@
 #define EXECVP_ERROR "execvp failure"
 #define FILE_ERROR "file failure"
 #define ARG_NUM_ERROR "not enough arguments given"
+#define RMDIR_ERROR "rmdir failed"
 #define SUCCESS 0
 #define EXIT_FAIL 1
 #define FAILURE_CODE -1
@@ -43,6 +46,9 @@ int container(void* arg) {
 	    std::cerr << SYS_ERROR << HOST_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
+//	char myname[40+1];
+//	gethostname(myname, 40);
+//	std::cerr << "HOSTNAME: " << myname << std::endl;
 
 	// change root
 	if (chroot(new_filesystem_dir) == FAILURE_CODE) {
@@ -55,11 +61,14 @@ int container(void* arg) {
 	    std::cerr << SYS_ERROR << CHDIR_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
+
+
 	//TODO ERASE - Only for debugging
 	//std::cerr << new_filesystem_dir << std::endl;
-	//	char tmp[256];
-	// 	getcwd(tmp, 256);
-	// 	std::cerr << "Current working directory: " << tmp << std::endl;
+//	char tmp[256];
+//	getcwd(tmp, 256);
+//	std::cerr << "Current working directory: " << tmp << std::endl;
+
 
 	std::string dirs[] = {"sys", "fs", "cgroups", "pids"};
     for (std::string s : dirs) {
@@ -101,6 +110,25 @@ int container(void* arg) {
 	notifyOnRelease << "1";
 	notifyOnRelease.close();
 
+//    if (mkdir("/sys/fs/cgroups/pids/", S_IRUSR | S_IWUSR) == FAILURE_CODE) {
+//        std::cerr << SYS_ERROR << MKDIR_ERROR << std::endl;
+//        exit(EXIT_FAIL);
+//    }
+//
+//
+//    int fp1 = open("/sys/fs/cgroups/pids/cgroup.procs", O_WRONLY | O_APPEND );
+//    write(fp1, "1", strlen("1"));
+//    close(fp1);
+//
+//    int fp2 = open("/sys/fs/cgroups/pids/pids.max", O_WRONLY | O_APPEND );
+//    write(fp2, num_processes, strlen(num_processes));
+//    close(fp2);
+//
+//    int fp3 = open("/sys/fs/cgroups/pids/notify_on_release", O_WRONLY | O_APPEND );
+//    write(fp3, "1", strlen("1"));
+//    close(fp3);
+
+
 	if (chdir("/") == FAILURE_CODE) {
 	    std::cerr << SYS_ERROR << CHDIR_ERROR << std::endl;
 	    exit(EXIT_FAIL);
@@ -108,9 +136,12 @@ int container(void* arg) {
 
 
 	//Mount
-	if (mount("proc", "/proc", "proc", 0, 0) != SUCCESS) {
+	int c = mount("proc", "/proc", "proc", 0, 0);
+	if (c != SUCCESS) {
+	    std::cerr << c << std::endl;
+	    std::cerr << strerror(errno) << std::endl;
 	    std::cerr << SYS_ERROR << MOUNT_ERROR << std::endl;
-	    exit(EXIT_FAIL);
+	    //exit(EXIT_FAIL);
 	}
 
 	//  run the terminal/new program
@@ -133,7 +164,7 @@ int main(int argc, char* argv[]) {
 	    std::cerr << SYS_ERROR << MEM_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
-	char* new_filesystem_dir = argv[2];
+	std::string new_filesystem_dir = argv[2];
 	int container_pid = clone(container, stack + STACK, CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD, argv);
 	if (container_pid == FAILURE_CODE) {
 	    std::cerr << SYS_ERROR << CLONE_ERROR << std::endl;
@@ -143,25 +174,42 @@ int main(int argc, char* argv[]) {
 	    std::cerr << SYS_ERROR << WAIT_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
-	if (umount(strcat(new_filesystem_dir, "/proc")) == FAILURE_CODE) {
+	if (umount((new_filesystem_dir + "/proc").c_str()) == FAILURE_CODE) {
 	    std::cerr << SYS_ERROR << UMOUNT_ERROR << std::endl;
-	    exit(EXIT_FAIL);
+	    //exit(EXIT_FAIL);
 	}
-	if (remove(strcat(new_filesystem_dir, "/sys/fs/cgroup/pids/cgroup.procs")) != SUCCESS) {
+	if (remove((new_filesystem_dir + "sys/fs/cgroups/pids/cgroup.procs").c_str()) != SUCCESS) {
+	    std::cerr << (new_filesystem_dir + "sys/fs/cgroups/pids/cgroup.procs").c_str() << std::endl;
 	    std::cerr << SYS_ERROR << REMOVE_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
-	if (remove(strcat(new_filesystem_dir, "/sys/fs/cgroup/pids/pids.max")) != SUCCESS) {
+	if (remove((new_filesystem_dir + "sys/fs/cgroups/pids/pids.max").c_str()) != SUCCESS) {
 	    std::cerr << SYS_ERROR << REMOVE_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
-	if (remove(strcat(new_filesystem_dir, "/sys/fs/cgroup/pids/notify_on_release")) != SUCCESS) {
+	if (remove((new_filesystem_dir + "sys/fs/cgroups/pids/notify_on_release").c_str()) != SUCCESS) {
 	    std::cerr << SYS_ERROR << REMOVE_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
-	if (rmdir("sys") != FAILURE_CODE){
-	    std::cerr << SYS_ERROR << std::endl; //TODO
+
+
+	if (chdir("sys/fs/cgroups") == FAILURE_CODE) {
+	    std::cerr << SYS_ERROR << CHDIR_ERROR << std::endl;
 	    exit(EXIT_FAIL);
+	}
+	std::string dirs[] = {"pids", "cgroups", "fs", "sys"};
+	for (std::string s : dirs) {
+	    if (rmdir(s.c_str()) == FAILURE_CODE) {
+	        std::cerr << SYS_ERROR << RMDIR_ERROR << std::endl;
+	        exit(EXIT_FAIL);
+	    }
+	    if (s.compare("sys")) { // when equal we do not go into condition
+	        if (chdir("..") == FAILURE_CODE) {
+	            std::cerr << SYS_ERROR << CHDIR_ERROR << std::endl;
+	            exit(EXIT_FAIL);
+	        }
+	    }
+
 	}
 	free(stack);
 }

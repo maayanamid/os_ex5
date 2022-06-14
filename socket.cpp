@@ -93,7 +93,7 @@ int establish(int port) {
     memcpy(&sa.sin_addr, hp->h_addr, hp->h_length);
     // port number
     sa.sin_port= htons(port);
-    // create socket
+    // create socketf
     int s = socket(AF_INET, SOCK_STREAM, 0);
     if (s < SUCCESS) {
         std::cerr << SYS_ERROR << SOCKET_ERROR << std::endl;
