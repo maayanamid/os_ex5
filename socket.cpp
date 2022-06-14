@@ -140,34 +140,38 @@ int call_socket(char *hostname, int portnum) {
 
 
 int run_server(int port) {
-    char buf[BUFFLEN] = {'\0'};
-
     // establish a socket and listen
     int s = establish(port);
 
     // accept connection
+    while (true) {
 
-    struct sockaddr_in isa;
-    int i = sizeof(isa);
-    // find socket's address
-    getsockname(s, (struct sockaddr *) &isa, (socklen_t *) &i);
-    // accept connection if there is one */
-    int c = accept(s,  (struct sockaddr *) (&isa), (socklen_t *) (&i));
-    if (c < SUCCESS) {
-        std::cerr << SYS_ERROR << ACCEPT_ERROR << std::endl;
-        exit(EXIT_FAIL);
+
+        char buf[BUFFLEN] = {'\0'};
+
+        struct sockaddr_in isa;
+        int i = sizeof(isa);
+        // find socket's address
+        getsockname(s, (struct sockaddr *) &isa, (socklen_t *) &i);
+        // accept connection if there is one */
+        int c = accept(s,  (struct sockaddr *) (&isa), (socklen_t *) (&i));
+        if (c < SUCCESS) {
+            std::cerr << SYS_ERROR << ACCEPT_ERROR << std::endl;
+            exit(EXIT_FAIL);
+        }
+
+        //read terminal command from connection
+        read_data(c, buf, BUFFLEN - 1);
+
+        // execute terminal command
+        if (system(buf) != 0) {
+            std::cerr << SYS_ERROR << INVALID_COMMAND << std::endl;
+            exit(EXIT_FAIL);
+        }
+
+        close(c);
+
     }
-
-    //read terminal command from connection
-    read_data(c, buf, BUFFLEN - 1);
-
-    // execute terminal command
-    if (system(buf) != 0) {
-        std::cerr << SYS_ERROR << INVALID_COMMAND << std::endl;
-        exit(EXIT_FAIL);
-    }
-
-    close(c);
     close(s);
     return 0;
 }
@@ -176,7 +180,6 @@ int run_client(int port, char* terminal_command_to_run) {
     char myname[MAXHOSTNAME+1];
 
     // connect to socket on self
-    // TODO make sure not given
     gethostname(myname, MAXHOSTNAME);
     int s = call_socket(myname, port);
 
