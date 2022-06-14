@@ -1,0 +1,36 @@
+CC=g++
+CXX=g++
+RANLIB=ranlib
+SOCKET = socket
+CONTAINER = container
+CONTAINER_SRC=$(CONTAINER).cpp
+SOCKET_SRC = $(SOCKET).cpp
+SOURCE = $(CONTAINER_SRC) $(SOCKET_SRC)
+OBJS=$(CONTAINER) $(SOCKET)
+INCS=-I.
+CFLAGS = -Wall -std=c++11 -g $(INCS)
+CXXFLAGS = -Wall -std=c++11 -g $(INCS)
+
+TARGETS = $(CONTAINER) $(SOCKET)
+
+TAR=tar
+TARFLAGS=-cvf
+TARNAME=ex5.tar
+TARSRCS=$(CONTAINER_SRC) $(SOCKET_SRC) Makefile README
+
+all: $(TARGETS)
+
+$(CONTAINER): $(CONTAINER_SRC)
+	$(CC) $(CFLAGS) -o $(CONTAINER) $(CONTAINER_SRC)
+
+$(SOCKET): $(SOCKET_SRC)
+	$(CC) $(CFLAGS) -o $(SOCKET) $(SOCKET_SRC)
+
+clean:
+	$(RM) $(TARGETS) $(OBJS)*~ *core
+
+depend:
+	makedepend -- $(CFLAGS) -- $(SRC) $(SOURCE)
+
+tar:
+	$(TAR) $(TARFLAGS) $(TARNAME) $(TARSRCS)
