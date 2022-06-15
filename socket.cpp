@@ -172,8 +172,8 @@ int run_server(int port) {
         close(c);
 
     }
-//    close(s);
-//    return 0;
+    close(s);
+    return 0;
 }
 
 int run_client(int port, char* terminal_command_to_run) {

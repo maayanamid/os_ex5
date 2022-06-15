@@ -10,7 +10,6 @@
 #include <signal.h>
 
 #define STACK 8192
-#define MAX_ARG_NUM 10 //TODO version 1: what is the right value?. TODO version 2: erase
 #define SYS_ERROR "system error: "
 #define MEM_ERROR "memory allocation failed "
 #define CLONE_ERROR "clone failure "
@@ -31,12 +30,12 @@
 #define FAILURE_CODE -1
 
 int container(void* arg) {
-	char** argv = (char **)arg; //TODO version 2: decrease all these indexes by 1, including args_for_program
-	char* new_hostname = argv[2];
-	char* new_filesystem_dir = argv[3];
-	char* num_processes = argv[4];
-	char* path_to_program_to_run_within_container = argv[5];
-	char** args_for_program = argv + 5; //TODO version 1: this seems to work, but why?.
+	char** argv = (char **)arg;
+	char* new_hostname = argv[1];
+	char* new_filesystem_dir = argv[2];
+	char* num_processes = argv[3];
+	char* path_to_program_to_run_within_container = argv[4];
+	char** args_for_program = argv + 4;
 
 	// change hostname
 	if (sethostname(new_hostname, strlen(new_hostname)) == FAILURE_CODE) {
@@ -56,6 +55,7 @@ int container(void* arg) {
 	    exit(EXIT_FAIL);
 	}
 
+	// create directory for cgroups files
     std::string dirs[] = {"sys/fs", "sys/fs/cgroups", "sys/fs/cgroups/pids"};
 	for (std::string s : dirs) {
         if (mkdir(s.c_str(), 0755) == FAILURE_CODE) {
@@ -93,17 +93,11 @@ int container(void* arg) {
 	notifyOnRelease.close();
 
 	//Mount
-	int c = mount("proc", "/proc", "proc", 0, 0);
-	if (c != SUCCESS) {
+	if (mount("proc", "/proc", "proc", 0, 0) != SUCCESS) {
 	    std::cerr << SYS_ERROR << MOUNT_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
 
-    //find args // TODO version 1: seems to work without this part. Erase in both versions, assuming it works
-//    int n_args_for_program = atoi(argv[0]);
-//    for (int i = 6; i <= n_args_for_program; i++){ //6 is where program args begin
-//        //std::cerr << argv[i] << std::endl;
-//    }
 
 	//  run the terminal/new program
 	int ret = execvp(path_to_program_to_run_within_container, args_for_program);
@@ -125,15 +119,8 @@ int main(int argc, char* argv[]) {
 	    std::cerr << SYS_ERROR << MEM_ERROR << std::endl;
 	    exit(EXIT_FAIL);
 	}
-	//prep args
-    //TODO version 2: erase these lines
-	char* new_args[MAX_ARG_NUM];
-	new_args[0] = (char*) std::to_string(argc).c_str();
-	for (int i = 0; i < argc; i++) {
-	    new_args[i + 1] = argv[i];
-	}
 
-	int container_pid = clone(container, stack + STACK, CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD, new_args); //TODO version 2: argv instead of new_args
+	int container_pid = clone(container, stack + STACK, CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD, argv);
 	if (container_pid == FAILURE_CODE) {
 	    std::cerr << SYS_ERROR << CLONE_ERROR << std::endl;
 	    exit(EXIT_FAIL);
@@ -143,6 +130,7 @@ int main(int argc, char* argv[]) {
 	    exit(EXIT_FAIL);
 	}
 
+	// unmount
 	std::string new_filesystem_dir = argv[2];
 	if (umount((new_filesystem_dir + "/proc").c_str()) == FAILURE_CODE) {
 	    std::cerr << SYS_ERROR << UMOUNT_ERROR << std::endl;
